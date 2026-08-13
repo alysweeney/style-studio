@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Style Studio</title>
+<meta name="theme-color" content="#2F3F87">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ---------------- signed out ---------------- -->
+<section id="view-auth" class="view">
+  <div class="col narrow">
+    <header class="masthead">
+      <h1 class="wordmark">Style Studio</h1>
+    </header>
+    <p class="lede">Outfits from the clothes you already own, for the weather you're
+      actually getting.</p>
+
+    <form id="auth-form" class="stack">
+      <label class="field-in">
+        <span class="label">Email</span>
+        <input type="email" id="auth-email" autocomplete="email" required>
+      </label>
+      <label class="field-in">
+        <span class="label">Password</span>
+        <input type="password" id="auth-password" autocomplete="current-password"
+               minlength="6" required>
+      </label>
+      <p id="auth-error" class="error" hidden></p>
+      <div class="row">
+        <button type="submit" class="primary" id="auth-signin">Sign in</button>
+        <button type="button" id="auth-register">Create account</button>
+      </div>
+    </form>
+
+    <p id="auth-unconfigured" class="note" hidden>
+      Firebase isn't configured yet — paste your web config into <code>cloud.js</code>.
+    </p>
+  </div>
+</section>
+
+<!-- ---------------- today ---------------- -->
+<section id="view-today" class="view" hidden>
+  <div class="col">
+    <header class="masthead">
+      <h1 class="wordmark">Style Studio</h1>
+      <span class="today" id="today-date"></span>
+    </header>
+
+    <section id="weather" class="weather" aria-live="polite">
+      <p class="note">Checking the forecast…</p>
+    </section>
+
+    <div class="row spread">
+      <span class="label">Dressing for</span>
+      <div class="seg-ctl" id="formality-picker" role="radiogroup" aria-label="How dressed up"></div>
+    </div>
+
+    <div id="outfits" class="stack"></div>
+    <div id="gap"></div>
+  </div>
+</section>
+
+<!-- ---------------- closet ---------------- -->
+<section id="view-closet" class="view" hidden>
+  <div class="col">
+    <header class="masthead">
+      <h1 class="wordmark">Closet</h1>
+      <span class="today" id="closet-count"></span>
+    </header>
+    <p id="closet-todo" class="note" hidden></p>
+    <div id="closet-grid" class="grid"></div>
+  </div>
+</section>
+
+<!-- ---------------- add an item ---------------- -->
+<section id="view-add" class="view" hidden>
+  <div class="col">
+    <header class="masthead">
+      <h1 class="wordmark">Add an item</h1>
+    </header>
+
+    <label class="drop" id="drop">
+      <img id="add-preview" alt="" hidden>
+      <span class="drop-empty" id="drop-empty">
+        <span class="drop-plus">+</span>
+        <span>Photo or listing screenshot</span>
+      </span>
+      <input type="file" id="add-file" accept="image/*" hidden>
+    </label>
+
+    <form id="add-form" class="stack" hidden>
+      <label class="field-in">
+        <span class="label">What is it?</span>
+        <input type="text" id="f-name" placeholder="black pleated trousers" required>
+      </label>
+
+      <div class="fields" id="f-tags"></div>
+
+      <div class="human">
+        <p>A photo can't tell me these two, and they're the difference between an
+          outfit you'd actually wear and one that only looks right on a screen.</p>
+
+        <div class="ask">
+          <span class="label">Does it fit you right now?</span>
+          <div class="seg-ctl" id="f-fits" role="radiogroup" aria-label="Fits now"></div>
+          <p class="hint">Packing something away is reversible — it stays in your
+            closet and comes back whenever you flip this.</p>
+        </div>
+
+        <div class="ask">
+          <span class="label">Comfort</span>
+          <div class="seg-ctl" id="f-comfort" role="radiogroup" aria-label="Comfort"></div>
+          <p class="hint" id="comfort-hint"></p>
+        </div>
+      </div>
+
+      <p id="add-error" class="error" hidden></p>
+      <div class="row">
+        <button type="submit" class="primary" id="add-save">Save to closet</button>
+        <button type="button" id="add-cancel">Cancel</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<!-- ---------------- nav ---------------- -->
+<nav id="nav" hidden>
+  <button data-view="today" class="on">Today</button>
+  <button data-view="closet">Closet</button>
+  <button data-view="add">Add</button>
+  <button id="nav-signout" title="Sign out">Out</button>
+</nav>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
