@@ -50,7 +50,68 @@ arithmetic to a model is how you get an outfit that's wrong about the weather; h
 the taste to a rules engine is how you get outfits that are technically correct and
 look like nothing.
 
-## Setup
+## Firebase setup
+
+This app needs **its own Firebase project** — not the couch-to-novel or workout-tracker
+one. Sharing would mean editing live security rules that protect other people's data
+every time this app's schema changes.
+
+**1. Create the project.** [console.firebase.google.com](https://console.firebase.google.com)
+→ *Add project* → name it `style-studio`. Google Analytics is not needed; turn it off.
+
+**2. Turn on sign-in.** *Build → Authentication → Get started →* enable
+**Email/Password**. Nothing else.
+
+**3. Create the database.** *Build → Firestore Database → Create database.* Start in
+**production mode** (the rules below replace the default), and pick the region closest
+to you — it can't be changed later.
+
+**4. Get the web config.** *Project settings* (gear icon) *→ Your apps →* the `</>`
+web icon → register the app, nickname `style-studio`. Copy the `firebaseConfig` object
+and paste it over the `REPLACE_` placeholders in **`cloud.js`**.
+
+That key is safe to commit. It identifies the project; it does not grant access. Access
+is enforced entirely by the rules in step 5. (This is *not* true of an Anthropic key —
+see the warning at the top of `cloud.js`.)
+
+**5. Paste the security rules.** *Firestore Database → Rules*, replace everything:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/closet/{itemId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /users/{userId}/wearLog/{entryId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /users/{userId}/outfits/{date} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+```
+
+Every path is scoped to one signed-in user reading and writing only their own documents.
+Publish, then create your account from the app's sign-in screen.
+
+**No Firebase Storage.** Garment photos are resized to ~400px in the browser and stored
+as JPEG data URIs *inside* each closet document. Storage now requires the paid Blaze
+plan for new projects, and a 20 KB thumbnail sits well under Firestore's 1 MiB
+per-document cap — a hundred-item closet is roughly 2 MB in total.
+
+### What lives where
+
+| Collection | Written by | Holds |
+|---|---|---|
+| `users/{uid}/closet/{itemId}` | the app | every garment, its tags, its thumbnail |
+| `users/{uid}/wearLog/{date}` | the app | what was actually worn |
+| `users/{uid}/outfits/{date}` | `scripts/outfit.py` on the Mac | the day's composed outfits and reasoning |
+
+## Setup (the Python side)
+
+Only needed for Claude-composed outfits; the app runs without it.
 
 ```sh
 python3 -m pip install --user anthropic
@@ -58,7 +119,19 @@ mkdir -p ~/.config/personal-automation
 echo 'ANTHROPIC_API_KEY=sk-ant-...' > ~/.config/personal-automation/anthropic.env
 ```
 
-The key lives outside this repo on purpose — repo convention.
+The key lives outside this repo on purpose — repo convention, and doubly so now the
+repo is public.
+
+## Tests
+
+```sh
+./test/run.sh
+```
+
+36 checks against the rules engine: warmth bands and their boundaries, forecast
+modifiers, every branch of the wearability filter, formality ranges, outfit assembly,
+the outfit-level comfort rule, degenerate closets, and the gap list. Needs no install —
+JavaScriptCore ships with macOS.
 
 ## Use
 
