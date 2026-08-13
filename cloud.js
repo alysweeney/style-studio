@@ -24,12 +24,12 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 const firebaseConfig = {
-  apiKey: 'REPLACE_WITH_WEB_API_KEY',
-  authDomain: 'REPLACE.firebaseapp.com',
-  projectId: 'REPLACE',
-  storageBucket: 'REPLACE.firebasestorage.app',
-  messagingSenderId: 'REPLACE',
-  appId: 'REPLACE',
+  apiKey: 'AIzaSyBEoApxPVDHls3GGyCTfXy-VBY5_vvLCEo',
+  authDomain: 'style-studio-a766a.firebaseapp.com',
+  projectId: 'style-studio-a766a',
+  storageBucket: 'style-studio-a766a.firebasestorage.app',
+  messagingSenderId: '325923168319',
+  appId: '1:325923168319:web:414603512c269cd880188a',
 };
 
 export const isConfigured = !firebaseConfig.apiKey.startsWith('REPLACE');
