@@ -1,0 +1,20 @@
+# This repo is public. Aly's actual wardrobe is not.
+#
+# The app code, taxonomy, and engine are all fine in the open — they're the
+# interesting part and none of it is sensitive. What stays out is anything that
+# describes her specifically: what she owns, what it looks like, what she wears,
+# and the style analysis derived from her boards.
+#
+# The real home for all of it is Firestore, which is where the app reads it
+# from anyway. These local files are a working copy for the Python scripts.
+
+photos/
+data/*
+!data/*.example.md
+!data/*.example.json
+
+# Credentials never live in the repo — see README.
+*.env
+.DS_Store
+__pycache__/
+*.pyc
