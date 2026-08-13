@@ -4,6 +4,7 @@
 
 import * as cloud from './cloud.js';
 import { buildOutfits, readForecast, seasonOf, recentlyWorn, biggestGap, wearable } from './outfits.js';
+import { removeBackground } from './cutout.js';
 import {
   CATEGORY, COLOR_FAMILY, VALUE, SATURATION, TEXTURE, PATTERN, SILHOUETTE,
   SEASONS, FORMALITY, FIT, COMFORT, SLOTS,
@@ -419,25 +420,64 @@ function openAdd(photo = null, name = '') {
   show('add');
 }
 
-// Resize in the browser so the whole garment fits inside a Firestore document.
-// ~420px JPEG lands around 15-25 KB, well under the 1 MiB per-doc cap, which is
-// what lets us skip Firebase Storage and its paid plan entirely.
-function shrink(file, max = 420, quality = 0.7) {
+function loadImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, max / Math.max(img.width, img.height));
-      const c = el('canvas');
-      c.width = Math.round(img.width * scale);
-      c.height = Math.round(img.height * scale);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(img.src);
-      resolve(c.toDataURL('image/jpeg', quality));
-    };
+    img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("That file didn't open as an image."));
     img.src = URL.createObjectURL(file);
   });
 }
+
+// Resize, then lift the backdrop so the piece can sit on the flat-lay sweep
+// instead of inside its own rectangle.
+//
+// ~420px keeps the whole garment inside a Firestore document — well under the
+// 1 MiB per-doc cap, which is what lets us skip Firebase Storage and its paid
+// plan. A successful cutout has to be PNG to carry transparency; a refusal
+// stays JPEG, which is smaller, and the original pixels are redrawn because
+// removeBackground may have already zeroed alpha before deciding to give up.
+async function prepare(file, max = 420) {
+  const img = await loadImage(file);
+  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  const c = el('canvas');
+  c.width = Math.round(img.width * scale);
+  c.height = Math.round(img.height * scale);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const draw = () => { ctx.clearRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height); };
+
+  draw();
+  let result;
+  try {
+    const pixels = ctx.getImageData(0, 0, c.width, c.height);
+    result = removeBackground(pixels);
+    if (result.ok) ctx.putImageData(pixels, 0, 0);
+    else draw();
+  } catch {
+    // getImageData can throw on a tainted canvas; not fatal, just no cutout.
+    draw();
+    result = { ok: false, reason: 'unreadable' };
+  }
+  URL.revokeObjectURL(img.src);
+
+  return {
+    photo: result.ok ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.72),
+    cutout: result.ok,
+    reason: result.reason,
+  };
+}
+
+// The failure the algorithm cannot see: a model shot cuts out perfectly and is
+// still useless, because what survives is a person. Only the preview can tell
+// her that, so every message points back at it.
+const CUTOUT_NOTE = {
+  textured: 'Kept as-is — the background is too busy to lift cleanly. Lay it on a plain ' +
+            'surface, or long-press the garment in Photos to lift the subject first.',
+  'nothing-to-remove': 'Kept as-is — no clear background to lift.',
+  'ate-the-garment': 'Kept as-is — the garment is too close in colour to its background ' +
+                     'to separate them safely.',
+  unreadable: "Kept as-is — couldn't read the image data.",
+};
 
 function wireAdd() {
   $('#drop').addEventListener('click', () => $('#add-file').click());
@@ -445,10 +485,17 @@ function wireAdd() {
     const file = ev.target.files?.[0];
     if (!file) return;
     try {
-      const photo = await shrink(file);
+      const { photo, cutout, reason } = await prepare(file);
       state.draft ||= blankDraft();
       state.draft.photo = photo;
       openAdd(photo, state.draft.name);
+      const note = $('#add-photo-note');
+      note.hidden = false;
+      note.textContent = cutout
+        ? 'Background removed. Check the preview: if you can still see a model wearing ' +
+          'it, use the flat product photo instead — lifting the backdrop off a person ' +
+          'leaves the person, and that never sits right in a flat-lay.'
+        : CUTOUT_NOTE[reason] || 'Kept as-is.';
     } catch (e) {
       $('#add-error').hidden = false;
       $('#add-error').textContent = e.message;

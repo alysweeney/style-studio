@@ -19,3 +19,10 @@ strip() { sed -e "/^import .* from '.*';$/d" -e 's/^export //' "$1"; }
 
 { strip taxonomy.js; strip outfits.js; cat test/engine.js; } > "$TMP"
 "$JSC" "$TMP" || exit 1
+
+# Background removal works on a plain {data,width,height} rather than a real
+# ImageData precisely so it can be exercised here, with no canvas in sight.
+CUT=$(mktemp /tmp/style-cutout-XXXXXX.js)
+trap 'rm -f "$TMP" "$CUT"' EXIT
+{ strip cutout.js; cat test/cutout.js; } > "$CUT"
+"$JSC" "$CUT" || exit 1

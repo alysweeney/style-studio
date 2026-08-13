@@ -1,4 +1,4 @@
-const CACHE_NAME = 'style-studio-v1';
+const CACHE_NAME = 'style-studio-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS = [
   './app.js',
   './cloud.js',
   './outfits.js',
+  './cutout.js',
   './taxonomy.js',
   './manifest.json',
   './icons/icon-192.png',
