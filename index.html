@@ -73,6 +73,10 @@
       <h1 class="wordmark">Closet</h1>
       <span class="today" id="closet-count"></span>
     </header>
+    <div class="row">
+      <button id="closet-import">Import a seed file</button>
+      <input type="file" id="import-file" accept="application/json,.json" hidden>
+    </div>
     <p id="closet-todo" class="note" hidden></p>
     <div id="closet-grid" class="grid"></div>
   </div>
@@ -89,44 +93,21 @@
       <img id="add-preview" alt="" hidden>
       <span class="drop-empty" id="drop-empty">
         <span class="drop-plus">+</span>
-        <span>Photo or listing screenshot</span>
+        <span>Add photos — pick as many as you like</span>
+        <span class="drop-sub">JPEG, PNG or HEIC</span>
       </span>
-      <input type="file" id="add-file" accept="image/*" hidden>
+      <input type="file" id="add-file" accept="image/*,.heic,.heif" multiple hidden>
     </label>
     <p id="add-photo-note" class="hint" hidden></p>
 
-    <form id="add-form" class="stack" hidden>
-      <label class="field-in">
-        <span class="label">What is it?</span>
-        <input type="text" id="f-name" placeholder="black pleated trousers" required>
-      </label>
-
-      <div class="fields" id="f-tags"></div>
-
-      <div class="human">
-        <p>A photo can't tell me these two, and they're the difference between an
-          outfit you'd actually wear and one that only looks right on a screen.</p>
-
-        <div class="ask">
-          <span class="label">Does it fit you right now?</span>
-          <div class="seg-ctl" id="f-fits" role="radiogroup" aria-label="Fits now"></div>
-          <p class="hint">Packing something away is reversible — it stays in your
-            closet and comes back whenever you flip this.</p>
-        </div>
-
-        <div class="ask">
-          <span class="label">Comfort</span>
-          <div class="seg-ctl" id="f-comfort" role="radiogroup" aria-label="Comfort"></div>
-          <p class="hint" id="comfort-hint"></p>
-        </div>
-      </div>
-
-      <p id="add-error" class="error" hidden></p>
-      <div class="row">
-        <button type="submit" class="primary" id="add-save">Save to closet</button>
-        <button type="button" id="add-cancel">Cancel</button>
-      </div>
-    </form>
+    <div class="human" id="add-bulk" hidden></div>
+    <div id="add-queue" class="stack"></div>
+    <p id="add-error" class="error" hidden></p>
+    <div class="row" id="add-actions" hidden>
+      <button class="primary" id="add-save">Save to closet</button>
+      <button id="add-clear">Clear</button>
+      <span class="hint" id="add-summary"></span>
+    </div>
   </div>
 </section>
 

@@ -45,6 +45,22 @@ described in the brief and from conventions inherited from `finance-tracker`.
   an item can't be saved as recommendable without it. Supersedes the earlier plan of
   editing `closet.json` manually after cataloging.
 
+- **Bulk import sets fit and comfort once for the batch, not per item.** Aly,
+  2026-08-14: being asked "tell me about this" after every photo is how a wardrobe
+  never gets loaded. The import screen applies one visible default to all of them
+  (fits now, medium comfort) and she taps only the exceptions. This is a stated,
+  editable default rather than a silent guess, which is what keeps it compatible
+  with the rule that the engine never invents these two fields.
+
+- **Tune the cutout against real photos, not synthetic ones.** The first version
+  identified the backdrop by bucketing border pixels into 16 levels and taking the
+  most common bucket. It passed every synthetic test and then lifted **8 of 36** of
+  Aly's actual photos, because a crumpled white sheet spans four buckets. Median
+  colour plus a tolerance passes **33 of 36**. A synthetic test that asserted a
+  wood floor should be *refused* was also wrong — the fill handles it, and refusing
+  lost a good cut-out. Any future change here gets measured against the real seed
+  before it gets believed.
+
 - **One purchase suggestion at a time, or none.** The gap list ranks by outfits
   unlocked and shows only the top entry. A list of five things to buy is the exact
   behavior this project exists to prevent.

@@ -4,7 +4,7 @@
 
 import * as cloud from './cloud.js';
 import { buildOutfits, readForecast, seasonOf, recentlyWorn, biggestGap, wearable } from './outfits.js';
-import { removeBackground } from './cutout.js';
+import { removeBackground, describeColour } from './cutout.js';
 import {
   CATEGORY, COLOR_FAMILY, VALUE, SATURATION, TEXTURE, PATTERN, SILHOUETTE,
   SEASONS, FORMALITY, FIT, COMFORT, SLOTS,
@@ -20,7 +20,9 @@ const state = {
   forecast: null,
   composed: null,       // written by scripts/outfit.py, if it ran this morning
   formality: Number(localStorage.getItem('formality') || 2),
-  draft: null,
+  queue: [],                                  // drafts waiting to be saved
+  bulk: { fits_now: true, comfort: 2 },       // one set of answers for the batch
+  expanded: null,
   unsub: [],
 };
 
@@ -200,7 +202,10 @@ function flatlay(pieces) {
   return el('div', { class: 'flatlay' },
     pieces
       .filter((p) => p.photo)
-      .map((p) => el('img', { src: p.photo, alt: p.name, class: `lay-${p.category}`, loading: 'lazy' })));
+      .map((p) => el('img', {
+        src: p.photo, alt: p.name, loading: 'lazy',
+        class: `lay-${p.category}${p.cutout ? ' cut' : ''}`,
+      })));
 }
 
 function outfitCard(outfit, note) {
@@ -322,15 +327,15 @@ function renderCloset() {
   }));
 }
 
-function editItem(item) {
-  state.draft = { ...item };
-  openAdd(item.photo, item.name);
-}
-
 // ---------------------------------------------------------------- add
 
-function selectField(labelText, key, options, current) {
-  const sel = el('select', { onchange: (e) => { state.draft[key] = coerce(e.target.value); } },
+// Adding a wardrobe one garment at a time, answering a form each time, is how
+// you end up never finishing. So: many files at once, everything the browser
+// can work out filled in already, one set of answers applied to the whole
+// batch, and per-item detail only when you go looking for it.
+
+function selectField(labelText, key, options, current, onChange) {
+  const sel = el('select', { onchange: (e) => onChange(key, coerce(e.target.value)) },
     ...options.map((o) => {
       const v = typeof o === 'object' ? o.v : o;
       const t = typeof o === 'object' ? o.name : o;
@@ -340,197 +345,321 @@ function selectField(labelText, key, options, current) {
 }
 const coerce = (v) => (v === 'true' ? true : v === 'false' ? false : /^-?\d+$/.test(v) ? Number(v) : v);
 
-function renderTagFields() {
-  const d = state.draft;
-  $('#f-tags').replaceChildren(
-    selectField('Category', 'category', CATEGORY, d.category),
-    selectField('Warmth', 'warmth', [0, 1, 2, 3, 4, 5], d.warmth),
-    selectField('Dresses down to', 'formality_min', [1, 2, 3, 4, 5], d.formality_min),
-    selectField('Dresses up to', 'formality_max', [1, 2, 3, 4, 5], d.formality_max),
-    selectField('Colour family', 'color_family', COLOR_FAMILY, d.color_family),
-    selectField('Lightness', 'value', VALUE, d.value),
-    selectField('Texture', 'texture', TEXTURE, d.texture),
-    selectField('Pattern', 'pattern', PATTERN, d.pattern),
-    selectField('Silhouette', 'silhouette', SILHOUETTE, d.silhouette),
-    selectField('Saturation', 'saturation', SATURATION, d.saturation),
-    selectField('Survives rain', 'water_ok', [{ v: false, name: 'No' }, { v: true, name: 'Yes' }], d.water_ok),
-    el('label', { class: 'field' }, el('span', { class: 'label' }, 'Seasons'),
-      el('div', { class: 'seg-ctl' }, SEASONS.map((s) =>
-        el('span', {
-          role: 'checkbox', tabindex: 0,
-          'aria-checked': String(d.seasons.includes(s)),
-          class: d.seasons.includes(s) ? 'on' : '',
-          onclick: (e) => {
-            const i = d.seasons.indexOf(s);
-            i < 0 ? d.seasons.push(s) : d.seasons.splice(i, 1);
-            e.target.classList.toggle('on');
-            e.target.setAttribute('aria-checked', String(i < 0));
-          },
-        }, s.slice(0, 3))))),
-  );
-}
-
-function renderHumanFields() {
-  const d = state.draft;
-  $('#f-fits').replaceChildren(...FIT.map((f) =>
-    el('span', {
-      role: 'radio', tabindex: 0, 'aria-checked': String(d.fits_now === f.v),
-      class: d.fits_now === f.v ? 'on' : '',
-      onclick: () => { d.fits_now = f.v; renderHumanFields(); },
-    }, f.name)));
-
-  $('#f-comfort').replaceChildren(...COMFORT.map((c) =>
-    el('span', {
-      role: 'radio', tabindex: 0, 'aria-checked': String(d.comfort === c.v),
-      class: d.comfort === c.v ? 'on' : '',
-      onclick: () => { d.comfort = c.v; renderHumanFields(); },
-    }, c.name)));
-
-  const chosen = COMFORT.find((c) => c.v === d.comfort);
-  $('#comfort-hint').textContent = chosen
-    ? `“${chosen.hint}”. One low-comfort piece in an outfit is fine — a whole outfit of them isn't.`
-    : 'One low-comfort piece in an outfit is fine — a whole outfit of them isn\'t.';
-}
-
-function blankDraft() {
+function blankDraft(over = {}) {
   return {
-    id: '', name: '', photo: null, category: 'top', warmth: 2,
-    formality_min: 2, formality_max: 3, color_family: 'neutral', value: 'mid',
-    texture: 'smooth', pattern: 'solid', silhouette: 'relaxed', saturation: 'muted',
-    water_ok: false, seasons: ['spring', 'fall', 'winter'],
+    id: '', name: '', photo: null, category: 'top', subcategory: '',
+    color_primary: '', color_secondary: null, color_family: 'neutral', value: 'mid',
+    saturation: 'muted', fabric: '', texture: 'smooth', pattern: 'solid',
+    structure: 2, silhouette: 'relaxed', length: 'hip', rise: 'n/a', leg: 'n/a',
+    warmth: 2, formality_min: 2, formality_max: 3,
+    seasons: ['spring', 'fall', 'winter'], water_ok: false,
     fits_now: null, comfort: null, wear_count: 0, last_worn: null,
+    uncertain_fields: [], notes: '', cutout: false, cutoutReason: '',
+    ...over,
   };
 }
 
-function openAdd(photo = null, name = '') {
-  if (!state.draft) state.draft = blankDraft();
-  const d = state.draft;
-  d.formality_min ??= (d.formality_range || [2, 3])[0];
-  d.formality_max ??= (d.formality_range || [2, 3])[1];
-  d.seasons ||= [];
-
-  $('#add-preview').hidden = !photo;
-  if (photo) $('#add-preview').src = photo;
-  $('#drop-empty').hidden = !!photo;
-  $('#f-name').value = name || d.name || '';
-  $('#add-form').hidden = !photo;
-  $('#add-error').hidden = true;
-  renderTagFields();
-  renderHumanFields();
-  show('add');
-}
-
-function loadImage(file) {
+function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("That file didn't open as an image."));
-    img.src = URL.createObjectURL(file);
+    // NB: img.decode() hangs indefinitely on a detached image in Chrome and
+    // wedges the whole renderer. onload is the reliable path — don't "improve"
+    // this back to decode().
+    img.onerror = () => reject(new Error('unsupported'));
+    img.src = src;
   });
 }
 
-// Resize, then lift the backdrop so the piece can sit on the flat-lay sweep
-// instead of inside its own rectangle.
-//
-// ~420px keeps the whole garment inside a Firestore document — well under the
-// 1 MiB per-doc cap, which is what lets us skip Firebase Storage and its paid
-// plan. A successful cutout has to be PNG to carry transparency; a refusal
-// stays JPEG, which is smaller, and the original pixels are redrawn because
-// removeBackground may have already zeroed alpha before deciding to give up.
-async function prepare(file, max = 420) {
-  const img = await loadImage(file);
-  const scale = Math.min(1, max / Math.max(img.width, img.height));
+// Resize, lift the backdrop, and read the colour off what survives.
+async function processImage(src, max = 420) {
+  const img = await loadImage(src);
+  const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
   const c = el('canvas');
-  c.width = Math.round(img.width * scale);
-  c.height = Math.round(img.height * scale);
+  c.width = Math.round(img.naturalWidth * scale);
+  c.height = Math.round(img.naturalHeight * scale);
   const ctx = c.getContext('2d', { willReadFrequently: true });
   const draw = () => { ctx.clearRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height); };
 
   draw();
-  let result;
+  let cut = { ok: false, reason: 'unreadable' };
+  let colour = { value: 'mid', saturation: 'muted', color_family: 'neutral' };
   try {
     const pixels = ctx.getImageData(0, 0, c.width, c.height);
-    result = removeBackground(pixels);
-    if (result.ok) ctx.putImageData(pixels, 0, 0);
+    cut = removeBackground(pixels);
+    if (cut.ok) ctx.putImageData(pixels, 0, 0);
     else draw();
+    colour = describeColour(cut.ok ? pixels : ctx.getImageData(0, 0, c.width, c.height));
   } catch {
-    // getImageData can throw on a tainted canvas; not fatal, just no cutout.
     draw();
-    result = { ok: false, reason: 'unreadable' };
   }
-  URL.revokeObjectURL(img.src);
-
   return {
-    photo: result.ok ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.72),
-    cutout: result.ok,
-    reason: result.reason,
+    photo: cut.ok ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.72),
+    cutout: cut.ok,
+    cutoutReason: cut.reason || '',
+    ...colour,
   };
 }
 
-// The failure the algorithm cannot see: a model shot cuts out perfectly and is
-// still useless, because what survives is a person. Only the preview can tell
-// her that, so every message points back at it.
+async function prepare(file, max = 420) {
+  const url = URL.createObjectURL(file);
+  try {
+    return await processImage(url, max);
+  } catch {
+    // Safari and iOS decode HEIC natively; Chrome and Firefox do not, and there
+    // is no way to fix that client-side without shipping a decoder.
+    throw new Error(/hei[cf]/i.test(file.type + file.name)
+      ? `${file.name} is HEIC, which this browser can't open. Safari and iOS can — ` +
+        `or set iPhone Camera to "Most Compatible" to shoot JPEG.`
+      : `${file.name} didn't open as an image.`);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 const CUTOUT_NOTE = {
-  textured: 'Kept as-is — the background is too busy to lift cleanly. Lay it on a plain ' +
-            'surface, or long-press the garment in Photos to lift the subject first.',
-  'nothing-to-remove': 'Kept as-is — no clear background to lift.',
-  'ate-the-garment': 'Kept as-is — the garment is too close in colour to its background ' +
-                     'to separate them safely.',
-  unreadable: "Kept as-is — couldn't read the image data.",
+  'too-similar': 'too close in colour to what it was lying on',
+  textured: 'background too busy to lift',
+  'nothing-to-remove': 'no clear background',
+  'ate-the-garment': 'too close in colour to its background',
+  unreadable: "couldn't read the pixels",
 };
+
+// A filename is a weak guess but a free one, and it beats an empty field.
+function guessName(filename) {
+  const stem = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  return /^(img|dsc|photo|screenshot|image)\b/i.test(stem) || /^\d+$/.test(stem) ? '' : stem;
+}
+
+async function ingest(files) {
+  const note = $('#add-photo-note');
+  const errors = [];
+  note.hidden = false;
+  note.textContent = `Reading ${files.length} image${files.length > 1 ? 's' : ''}…`;
+
+  for (const file of files) {
+    try {
+      const prepared = await prepare(file);
+      enqueue({ ...prepared, name: guessName(file.name) });
+    } catch (e) {
+      errors.push(e.message);
+    }
+    note.textContent = `Read ${state.queue.length} of ${files.length}…`;
+  }
+
+  const lifted = state.queue.filter((d) => d.cutout).length;
+  note.textContent = [
+    `${state.queue.length} ready, ${lifted} with the background lifted.`,
+    errors.length ? errors.join(' ') : '',
+  ].filter(Boolean).join(' ');
+  renderQueue();
+}
+
+// Every draft enters the queue already carrying the batch answers. She changes
+// them once at the top if the defaults are wrong, and taps individual items for
+// the exceptions.
+function enqueue(over) {
+  state.queue.push(blankDraft({ ...state.bulk, ...over }));
+}
+
+function applyBulk(key, value) {
+  state.bulk[key] = value;
+  for (const d of state.queue) if (!d.touched) d[key] = value;
+  renderQueue();
+}
+
+function renderQueue() {
+  const wrap = $('#add-queue');
+  const bulk = $('#add-bulk');
+  const hasQueue = state.queue.length > 0;
+  $('#drop').hidden = false;
+  bulk.hidden = !hasQueue;
+  $('#add-actions').hidden = !hasQueue;
+  if (!hasQueue) { wrap.replaceChildren(); return; }
+
+  // One set of answers for the whole batch. She said she doesn't keep clothes
+  // that look bad on her, so "fits now" defaults to yes and she flags the
+  // exceptions — which is a visible default, not a silent guess.
+  bulk.replaceChildren(
+    el('p', {}, `Set these once for all ${state.queue.length}, then tap any item that differs.`),
+    el('div', { class: 'ask' },
+      el('span', { class: 'label' }, 'These fit me right now'),
+      el('div', { class: 'seg-ctl' }, FIT.map((f) =>
+        el('span', {
+          role: 'radio', tabindex: 0, 'aria-checked': String(state.bulk.fits_now === f.v),
+          class: state.bulk.fits_now === f.v ? 'on' : '',
+          onclick: () => applyBulk('fits_now', f.v),
+        }, f.name)))),
+    el('div', { class: 'ask' },
+      el('span', { class: 'label' }, 'Comfort'),
+      el('div', { class: 'seg-ctl' }, COMFORT.map((c) =>
+        el('span', {
+          role: 'radio', tabindex: 0, 'aria-checked': String(state.bulk.comfort === c.v),
+          class: state.bulk.comfort === c.v ? 'on' : '',
+          onclick: () => applyBulk('comfort', c.v),
+        }, c.name)))),
+  );
+
+  wrap.replaceChildren(...state.queue.map((d, i) => {
+    const open = state.expanded === i;
+    const problems = [!d.name && 'needs a name', d.fits_now == null && 'needs fit',
+                      !d.comfort && 'needs comfort'].filter(Boolean);
+    return el('div', { class: `qitem${open ? ' open' : ''}${problems.length ? ' needs' : ''}` },
+      el('button', { class: 'qhead', onclick: () => { state.expanded = open ? null : i; renderQueue(); } },
+        el('img', { src: d.photo, alt: '' }),
+        el('span', { class: 'qmeta' },
+          el('span', { class: 'nm' }, d.name || 'Untitled'),
+          el('span', { class: 'st' },
+            [d.category, d.cutout ? 'cut out' : CUTOUT_NOTE[d.cutoutReason] || 'as-is',
+             ...problems].join(' · '))),
+        el('span', { class: 'chev' }, open ? '–' : '+')),
+      open ? el('div', { class: 'qbody' },
+        el('label', { class: 'field-in' }, el('span', { class: 'label' }, 'Name'),
+          el('input', { type: 'text', value: d.name, placeholder: 'black pleated trousers',
+            oninput: (e) => { d.name = e.target.value; d.touched = true; } })),
+        el('div', { class: 'fields' },
+          ...[['Category', 'category', CATEGORY], ['Warmth', 'warmth', [0, 1, 2, 3, 4, 5]],
+              ['Dresses down to', 'formality_min', [1, 2, 3, 4, 5]],
+              ['Dresses up to', 'formality_max', [1, 2, 3, 4, 5]],
+              ['Colour family', 'color_family', COLOR_FAMILY], ['Lightness', 'value', VALUE],
+              ['Texture', 'texture', TEXTURE], ['Pattern', 'pattern', PATTERN],
+              ['Silhouette', 'silhouette', SILHOUETTE], ['Saturation', 'saturation', SATURATION],
+              ['Survives rain', 'water_ok', [{ v: false, name: 'No' }, { v: true, name: 'Yes' }]],
+             ].map(([lbl, key, opts]) =>
+            selectField(lbl, key, opts, d[key], (k, v) => { d[k] = v; d.touched = true; })),
+          el('label', { class: 'field' }, el('span', { class: 'label' }, 'Seasons'),
+            el('div', { class: 'seg-ctl' }, SEASONS.map((s) =>
+              el('span', {
+                role: 'checkbox', tabindex: 0, 'aria-checked': String(d.seasons.includes(s)),
+                class: d.seasons.includes(s) ? 'on' : '',
+                onclick: (e) => {
+                  const at = d.seasons.indexOf(s);
+                  at < 0 ? d.seasons.push(s) : d.seasons.splice(at, 1);
+                  d.touched = true;
+                  e.target.classList.toggle('on');
+                },
+              }, s.slice(0, 3)))))),
+        el('div', { class: 'ask' }, el('span', { class: 'label' }, 'Fits right now'),
+          el('div', { class: 'seg-ctl' }, FIT.map((f) =>
+            el('span', { role: 'radio', tabindex: 0, class: d.fits_now === f.v ? 'on' : '',
+              onclick: () => { d.fits_now = f.v; d.touched = true; renderQueue(); } }, f.name)))),
+        el('div', { class: 'ask' }, el('span', { class: 'label' }, 'Comfort'),
+          el('div', { class: 'seg-ctl' }, COMFORT.map((c) =>
+            el('span', { role: 'radio', tabindex: 0, class: d.comfort === c.v ? 'on' : '',
+              onclick: () => { d.comfort = c.v; d.touched = true; renderQueue(); } }, c.name)))),
+        el('button', { onclick: () => { state.queue.splice(i, 1); state.expanded = null; renderQueue(); } },
+          'Remove'),
+      ) : null);
+  }));
+
+  const ready = state.queue.filter((d) => d.name && d.fits_now != null && d.comfort).length;
+  $('#add-save').textContent = `Save ${ready} to closet`;
+  $('#add-save').disabled = ready === 0;
+  $('#add-summary').textContent = ready < state.queue.length
+    ? `${state.queue.length - ready} still need a name, a fit or a comfort rating.`
+    : '';
+}
+
+function saveQueue() {
+  const ready = state.queue.filter((d) => d.name && d.fits_now != null && d.comfort);
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const writes = ready.map((d) => {
+    const item = { ...d, id: d.id || `${d.category}-${slug(d.name)}`,
+                   formality_range: [d.formality_min, d.formality_max] };
+    delete item.formality_min; delete item.formality_max;
+    delete item.touched; delete item.cutoutReason;
+    return cloud.saveItem(state.uid, item);
+  });
+  Promise.all(writes)
+    .then(() => {
+      state.queue = state.queue.filter((d) => !ready.includes(d));
+      state.expanded = null;
+      $('#add-photo-note').hidden = true;
+      renderQueue();
+      if (!state.queue.length) show('closet');
+    })
+    .catch((e) => {
+      const err = $('#add-error');
+      err.hidden = false;
+      err.textContent = e.code === 'permission-denied'
+        ? 'Firestore refused the write — check the security rules are published.'
+        : e.message;
+    });
+}
+
+// Bulk import of a seed file built by scripts/seed.py. Same queue, so the same
+// one-set-of-answers step applies.
+function importSeed(file) {
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const note = $('#add-photo-note');
+    try {
+      const parsed = JSON.parse(reader.result);
+      const items = parsed.items || parsed;
+      if (!Array.isArray(items)) throw new Error('no items array');
+      note.hidden = false;
+      show('add');
+
+      // The seed carries plain photographs. Run every one through the same
+      // cutout the picker uses, so the flat-lay gets lifted garments rather
+      // than a stack of bedsheet rectangles — and so the "cut out" label on
+      // each tile is true rather than assumed.
+      let lifted = 0;
+      for (const [i, it] of items.entries()) {
+        note.textContent = `Lifting backgrounds… ${i + 1} of ${items.length}`;
+        const [lo, hi] = it.formality_range || [2, 3];
+        const { fits_now, comfort, photo, ...rest } = it;
+        let processed = { photo, cutout: false, cutoutReason: 'unreadable' };
+        try {
+          if (photo) processed = await processImage(photo);
+        } catch { /* keep the original photo */ }
+        if (processed.cutout) lifted++;
+        enqueue({
+          ...rest, ...processed, formality_min: lo, formality_max: hi,
+          ...(fits_now == null ? {} : { fits_now }),
+          ...(comfort == null ? {} : { comfort }),
+        });
+        if (i % 6 === 0) renderQueue();
+      }
+      note.textContent =
+        `${items.length} items from ${file.name}. ${lifted} backgrounds lifted, ` +
+        `${items.length - lifted} kept as photographed.`;
+      renderQueue();
+    } catch (e) {
+      const err = $('#add-error');
+      err.hidden = false;
+      err.textContent = `Couldn't read that seed file: ${e.message}`;
+    }
+  };
+  reader.readAsText(file);
+}
+
+function editItem(item) {
+  const [lo, hi] = item.formality_range || [2, 3];
+  state.queue = [blankDraft({ ...item, formality_min: lo, formality_max: hi, touched: true })];
+  state.expanded = 0;
+  $('#add-photo-note').hidden = true;
+  show('add');
+  renderQueue();
+}
 
 function wireAdd() {
   $('#drop').addEventListener('click', () => $('#add-file').click());
-  $('#add-file').addEventListener('change', async (ev) => {
-    const file = ev.target.files?.[0];
-    if (!file) return;
-    try {
-      const { photo, cutout, reason } = await prepare(file);
-      state.draft ||= blankDraft();
-      state.draft.photo = photo;
-      openAdd(photo, state.draft.name);
-      const note = $('#add-photo-note');
-      note.hidden = false;
-      note.textContent = cutout
-        ? 'Background removed. Check the preview: if you can still see a model wearing ' +
-          'it, use the flat product photo instead — lifting the backdrop off a person ' +
-          'leaves the person, and that never sits right in a flat-lay.'
-        : CUTOUT_NOTE[reason] || 'Kept as-is.';
-    } catch (e) {
-      $('#add-error').hidden = false;
-      $('#add-error').textContent = e.message;
-    }
+  $('#add-file').addEventListener('change', (ev) => {
+    const files = [...(ev.target.files || [])];
+    ev.target.value = '';
+    if (files.length) ingest(files);
   });
-
-  $('#add-cancel').addEventListener('click', () => { state.draft = null; show('closet'); });
-
-  $('#add-form').addEventListener('submit', (ev) => {
-    ev.preventDefault();
-    const d = state.draft;
-    const err = $('#add-error');
-    d.name = $('#f-name').value.trim();
-
-    if (!d.name) return fail('Give it a name you would actually say out loud.');
-    if (d.fits_now == null) return fail('Does it fit you right now? That one is not optional.');
-    if (!d.comfort) return fail('Pick a comfort level — the engine will not guess it.');
-    if (!d.seasons.length) return fail('Pick at least one season.');
-    if (d.formality_min > d.formality_max) return fail('It cannot dress down further than it dresses up.');
-
-    const item = {
-      ...d,
-      id: d.id || `${d.category}-${d.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.replace(/-+$/, ''),
-      formality_range: [d.formality_min, d.formality_max],
-    };
-    delete item.formality_min;
-    delete item.formality_max;
-
-    cloud.saveItem(state.uid, item)
-      .then(() => { state.draft = null; show('closet'); })
-      .catch((e) => fail(e.code === 'permission-denied'
-        ? 'Firestore refused the write — check the security rules are published.'
-        : e.message));
-
-    function fail(msg) { err.hidden = false; err.textContent = msg; }
+  $('#import-file').addEventListener('change', (ev) => {
+    const file = ev.target.files?.[0];
+    ev.target.value = '';
+    if (file) importSeed(file);
+  });
+  $('#closet-import').addEventListener('click', () => $('#import-file').click());
+  $('#add-save').addEventListener('click', saveQueue);
+  $('#add-clear').addEventListener('click', () => {
+    state.queue = []; state.expanded = null;
+    $('#add-photo-note').hidden = true; renderQueue();
   });
 }
 
@@ -538,9 +667,8 @@ function wireAdd() {
 
 $$('#nav button[data-view]').forEach((b) =>
   b.addEventListener('click', () => {
-    if (b.dataset.view === 'add' && !state.draft) state.draft = blankDraft();
-    if (b.dataset.view === 'add') openAdd(state.draft.photo, state.draft.name);
-    else show(b.dataset.view);
+    show(b.dataset.view);
+    if (b.dataset.view === 'add') renderQueue();
   }));
 
 wireAuth();

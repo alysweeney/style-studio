@@ -55,14 +55,28 @@ ok('outside the ring is removed', alphaAt(donut, 0, 0) === 0);
 ok('ENCLOSED backdrop-coloured pixels are kept', alphaAt(donut, 20, 20) === 255);
 
 print('\nRefusing rather than mangling');
-// A textured background — Aly's trousers on a wood floor. No uniform colour to
-// fill from, so it must decline instead of chewing holes in the garment.
+// This used to assert that a brown-ramp "wood floor" was refused. Measured
+// against Aly's real photos that was the wrong call: the fill lifts her
+// trousers off a wood floor cleanly, and refusing lost a usable cut-out. What
+// should actually be refused is a background with no coherent colour at all.
 let seed = 7;
 const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-const wood = img(40, 40, () => { const v = 90 + rand() * 120; return [v, v * 0.7, v * 0.45]; });
-const r3 = removeBackground(wood);
-ok('declines a textured background', !r3.ok && r3.reason === 'textured', r3.reason);
-ok('leaves every pixel opaque when it declines', alphaAt(wood, 5, 5) === 255);
+const confetti = img(40, 40, () => [rand() * 255, rand() * 255, rand() * 255]);
+const r3 = removeBackground(confetti);
+ok('declines a background with no dominant colour', !r3.ok && r3.reason === 'textured', r3.reason);
+ok('leaves every pixel opaque when it declines', alphaAt(confetti, 5, 5) === 255);
+
+// The regression that prompted the median rewrite: a crumpled white sheet is
+// smooth but shaded, running roughly 200-255 across the frame. Bucket matching
+// called that noise and refused 28 of 36 real photos.
+const sheet = img(60, 60, (x, y) => {
+  const shade = 208 + Math.round(40 * Math.sin(x / 9) * Math.cos(y / 11));
+  return (x > 20 && x < 40 && y > 20 && y < 40) ? BLACK : [shade, shade, shade - 2];
+});
+const rSheet = removeBackground(sheet);
+ok('lifts a garment off a shaded, crumpled sheet', rSheet.ok, rSheet.reason);
+ok('and keeps the garment', alphaAt(sheet, 30, 30) === 255);
+ok('while clearing the sheet', alphaAt(sheet, 1, 1) === 0);
 
 const blank = img(40, 40, () => WHITE);
 const r4 = removeBackground(blank);
@@ -83,6 +97,25 @@ const noisy = img(40, 40, (x, y) => {
 const r6 = removeBackground(noisy);
 ok('a slightly noisy backdrop still lifts', r6.ok, r6.reason);
 ok('and the garment survives it', alphaAt(noisy, 20, 20) === 255);
+
+
+print('\nColour inference');
+const solid = (rgb) => img(20, 20, () => rgb);
+const desc = (rgb) => describeColour(solid(rgb));
+ok('white reads light and neutral', desc([250,250,250]).value === 'light' && desc([250,250,250]).color_family === 'neutral');
+ok('black reads dark and neutral', desc([18,18,18]).value === 'dark' && desc([18,18,18]).color_family === 'neutral');
+ok('mid grey reads mid', desc([128,128,130]).value === 'mid');
+ok('indigo denim reads cool', desc([40,50,110]).color_family === 'cool');
+ok('olive reads earth', desc([100,105,55]).color_family === 'earth');
+ok('camel reads earth', desc([170,130,80]).color_family === 'earth');
+ok('burgundy reads warm', desc([120,30,45]).color_family === 'warm');
+ok('a saturated scarf reads saturated', desc([230,110,20]).saturation === 'saturated');
+ok('a muted neutral reads muted', desc([200,198,196]).saturation === 'muted');
+// Transparent pixels are the backdrop, not the garment: a black tee cut out of a
+// white sheet must read as dark, not as an average of the two.
+const cutTee = img(30, 30, (x, y) => (x > 8 && x < 22 && y > 8 && y < 22 ? [20,20,20] : [252,252,252]));
+for (let p = 0; p < 30*30; p++) { const x = p % 30, y = (p/30)|0; if (!(x>8&&x<22&&y>8&&y<22)) cutTee.data[p*4+3] = 0; }
+ok('ignores transparent pixels', describeColour(cutTee).value === 'dark');
 
 print(failures ? `\n${failures} failure(s)\n` : '\nall cutout checks passed\n');
 if (failures) throw new Error(`${failures} cutout check(s) failed`);
