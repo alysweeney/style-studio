@@ -668,7 +668,10 @@ function editItem(item) {
 }
 
 function wireAdd() {
-  $('#drop').addEventListener('click', () => $('#add-file').click());
+  // NB: #drop is a <label> that wraps #add-file, so the browser already forwards
+  // the tap to the input. Calling input.click() here as well opened the picker
+  // TWICE — and the second open supersedes the first, discarding whatever was
+  // chosen. It looked exactly like "selecting photos does nothing".
   $('#add-file').addEventListener('change', (ev) => {
     const files = [...(ev.target.files || [])];
     ev.target.value = '';
