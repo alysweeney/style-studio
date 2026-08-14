@@ -19,23 +19,28 @@ import firestore
 import lib
 import morning
 
-ap = argparse.ArgumentParser()
-ap.add_argument("--apply", action="store_true")
-args = ap.parse_args()
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--apply", action="store_true")
+    args = ap.parse_args()
 
-if not lib.STYLE_DNA.exists():
-    raise SystemExit(f"Nothing to upload — {lib.STYLE_DNA} doesn't exist.")
+    if not lib.STYLE_DNA.exists():
+        raise SystemExit(f"Nothing to upload — {lib.STYLE_DNA} doesn't exist.")
 
-text = lib.STYLE_DNA.read_text()
-print(f"{lib.STYLE_DNA.name}: {len(text):,} characters, "
-      f"{len(text.splitlines())} lines", file=sys.stderr)
+    text = lib.STYLE_DNA.read_text()
+    print(f"{lib.STYLE_DNA.name}: {len(text):,} characters, "
+          f"{len(text.splitlines())} lines", file=sys.stderr)
 
-if not args.apply:
-    print("Dry run — nothing written. Re-run with --apply.", file=sys.stderr)
-    raise SystemExit
+    if not args.apply:
+        print("Dry run — nothing written. Re-run with --apply.", file=sys.stderr)
+        return
 
-email, password = morning.credentials()
-db = firestore.Client(email, password)
-db.put("style/dna", {"text": text,
-                     "updated_at": dt.datetime.now().isoformat(timespec="seconds")})
-print(f"Wrote users/{db.uid}/style/dna", file=sys.stderr)
+    email, password = morning.credentials()
+    db = firestore.Client(email, password)
+    db.put("style/dna", {"text": text,
+                         "updated_at": dt.datetime.now().isoformat(timespec="seconds")})
+    print(f"Wrote users/{db.uid}/style/dna", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
