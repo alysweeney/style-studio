@@ -169,6 +169,14 @@ input[type=text], input[type=email], input[type=password], select {
    off a listing screenshot. A real cut-out already has an alpha channel, and
    multiplying it would just dirty its edges against the sweep. */
 .flatlay img:not(.cut) { mix-blend-mode:multiply; }
+/* A garment photographed the wrong way up stays wrong until someone says so.
+   Stored per item rather than baked into the pixels, so it stays correctable. */
+.flatlay img.rot90  { transform:rotate(90deg); }
+.flatlay img.rot180 { transform:rotate(180deg); }
+.flatlay img.rot270 { transform:rotate(270deg); }
+.tile img.rot90  { transform:rotate(90deg); }
+.tile img.rot180 { transform:rotate(180deg); }
+.tile img.rot270 { transform:rotate(270deg); }
 .lay-outerwear { grid-area:2 / 1 / 10 / 6;  z-index:1; transform:rotate(-4deg); }
 .lay-top       { grid-area:1 / 4 / 8 / 11;  z-index:3; }
 .lay-dress     { grid-area:1 / 3 / 12 / 11; z-index:3; }

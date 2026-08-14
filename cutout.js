@@ -187,6 +187,21 @@ export function removeBackground(img, { tolerance = 40, feather = true, spread =
   return { ok: true, removed: share, bg: bg.rgb, islands: nComp, islandRatio };
 }
 
+// Has this image already been cut out — by Vision on the Mac, or by iOS's own
+// subject lift before it was shared in? Running a flood fill over an image that
+// already has an alpha channel wrecks it: the border is transparent, so there
+// is no backdrop colour to find and the fill eats whatever it touches.
+export function alreadyCutOut({ data, width, height }) {
+  let clear = 0, checked = 0;
+  for (let p = 0; p < width * height; p += 7) {
+    checked++;
+    if (data[p * 4 + 3] < 16) clear++;
+  }
+  // A photograph is fully opaque. Anything with a real transparent region has
+  // been through a cutout already.
+  return checked > 0 && clear / checked > 0.05;
+}
+
 // ---------------------------------------------------------------- colour
 
 // What a browser can honestly work out on its own. It can measure colour; it

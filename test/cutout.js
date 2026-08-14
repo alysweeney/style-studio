@@ -117,5 +117,13 @@ const cutTee = img(30, 30, (x, y) => (x > 8 && x < 22 && y > 8 && y < 22 ? [20,2
 for (let p = 0; p < 30*30; p++) { const x = p % 30, y = (p/30)|0; if (!(x>8&&x<22&&y>8&&y<22)) cutTee.data[p*4+3] = 0; }
 ok('ignores transparent pixels', describeColour(cutTee).value === 'dark');
 
+
+print('\nDetecting an image that was already cut out');
+const opaque = img(30, 30, () => WHITE);
+ok('a plain photograph is not mistaken for a cutout', !alreadyCutOut(opaque));
+const lifted = img(30, 30, (x,y) => (x>10&&x<20&&y>10&&y<20 ? BLACK : WHITE));
+for (let p = 0; p < 30*30; p++) { const x=p%30, y=(p/30)|0; if(!(x>10&&x<20&&y>10&&y<20)) lifted.data[p*4+3]=0; }
+ok('an image with a transparent region is detected', alreadyCutOut(lifted));
+
 print(failures ? `\n${failures} failure(s)\n` : '\nall cutout checks passed\n');
 if (failures) throw new Error(`${failures} cutout check(s) failed`);

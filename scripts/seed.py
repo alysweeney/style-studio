@@ -17,6 +17,7 @@ where she sets a default once and flags the exceptions.
 import argparse
 import base64
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,7 +42,7 @@ def T(**kw):
         pattern="solid", structure=2, silhouette="relaxed", length="hip",
         rise="n/a", leg="n/a", warmth=2, formality_range=[2, 3],
         seasons=["spring", "fall", "winter"], water_ok=False, uncertain_fields=[],
-        notes="",
+        rotate=0, notes="",
     )
     base.update(kw)
     return base
@@ -136,14 +137,16 @@ CATALOG = {
                   warmth=0, formality_range=[1, 1], seasons=ALL_SEASONS,
                   notes="Formality 1 only. Never leaves the house, and the engine "
                         "will never suggest it outside lounge."),
-    "IMG_6044": T(id="skirt-denim-mid", name="mid-wash denim skirt",
-                  category="bottom", subcategory="skirt", color_primary="mid blue",
+    "IMG_6044": T(id="skort-denim-mid", name="mid-wash denim skort",
+                  category="bottom", subcategory="skort", rotate=180, color_primary="mid blue",
                   color_family="cool", fabric="denim", texture="crisp", structure=3,
                   silhouette="straight", length="mini", rise="high", leg="n/a",
                   formality_range=[2, 3], seasons=WARM,
                   uncertain_fields=["subcategory"],
-                  notes="Possibly the same garment as IMG_6045 shot from another angle — "
-                        "check before both end up in the closet as separates."),
+                  notes="Corrected by Aly 2026-08-14: a skort, not a skirt, and the "
+                        "photo is upside down — hence rotate=180. Possibly the same "
+                        "garment as IMG_6045 from another angle; check before both end "
+                        "up in the closet as separates."),
     "IMG_6045": T(id="skirt-denim-utility", name="denim utility skirt",
                   category="bottom", subcategory="skirt", color_primary="mid blue",
                   color_family="cool", fabric="denim", texture="crisp", structure=3,
@@ -247,8 +250,55 @@ CATALOG = {
 }
 
 
-def to_thumb(src: Path) -> str:
-    """sips handles HEIC, PNG and JPEG identically, so the browser never has to."""
+LIFT = Path(__file__).resolve().parent.parent / "tools" / "liftsubject"
+CWEBP = shutil.which("cwebp")   # brew install webp
+
+
+def to_thumb(src: Path):
+    """A garment thumbnail, background removed where possible.
+
+    Prefers `tools/liftsubject`, which uses Apple's own subject-segmentation
+    model — the one Photos uses for long-press subject lift. It solves the cases
+    a colour flood fill fundamentally cannot: a white top on a white sheet, a
+    pale camisole on pale bedding, a garment that shares its colour with the
+    surface under it. It also crops to the subject, so every piece arrives at a
+    consistent scale instead of floating in whatever margin the photo had.
+
+    Falls back to a plain sips resize when the binary isn't built or Vision
+    finds no subject; the app's own flood fill then has a go at it.
+    """
+    if LIFT.exists():
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            cut = Path(tmp.name)
+        done = subprocess.run([str(LIFT), str(src), str(cut)], capture_output=True)
+        if done.returncode == 0 and cut.stat().st_size > 0:
+            # A cut-out needs an alpha channel, and PNG pays dearly for it —
+            # roughly 200 KB a garment, which is 8 MB across a wardrobe and a
+            # slow first load on a phone. WebP carries the same alpha at about
+            # a tenth the size. sips can read WebP but not write it, hence cwebp.
+            if CWEBP:
+                webp = cut.with_suffix(".webp")
+                enc = subprocess.run(
+                    [CWEBP, "-quiet", "-q", "82", "-alpha_q", "90",
+                     "-resize", str(THUMB_PX), "0", str(cut), "-o", str(webp)],
+                    capture_output=True,
+                )
+                if enc.returncode == 0 and webp.exists() and webp.stat().st_size > 0:
+                    data = base64.b64encode(webp.read_bytes()).decode()
+                    cut.unlink(missing_ok=True); webp.unlink(missing_ok=True)
+                    return "data:image/webp;base64," + data, True
+                webp.unlink(missing_ok=True)
+
+            subprocess.run(
+                ["sips", "-Z", str(THUMB_PX), "--setProperty", "format", "png",
+                 str(cut), "--out", str(cut)],
+                check=True, capture_output=True,
+            )
+            data = base64.b64encode(cut.read_bytes()).decode()
+            cut.unlink(missing_ok=True)
+            return "data:image/png;base64," + data, True
+        cut.unlink(missing_ok=True)
+
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
         out = Path(tmp.name)
     subprocess.run(
@@ -258,7 +308,7 @@ def to_thumb(src: Path) -> str:
     )
     data = base64.b64encode(out.read_bytes()).decode()
     out.unlink(missing_ok=True)
-    return "data:image/jpeg;base64," + data
+    return "data:image/jpeg;base64," + data, False
 
 
 def find(key: str):
@@ -280,15 +330,18 @@ def main():
     ap.add_argument("--apply", action="store_true", help="write data/seed.json")
     args = ap.parse_args()
 
+    from collections import Counter
     items, missing, total_kb = [], [], 0
+    lifted_count = Counter()
     for stem, tags in CATALOG.items():
         src = find(stem)
         if not src:
             missing.append(stem)
             continue
-        thumb = to_thumb(src)
+        thumb, lifted = to_thumb(src)
         total_kb += len(thumb) / 1024
-        item = {**tags, "photo": thumb, "source_photo": src.name,
+        lifted_count[lifted] += 1
+        item = {**tags, "photo": thumb, "source_photo": src.name, "cutout": lifted,
                 "fits_now": None, "comfort": None, "wear_count": 0, "last_worn": None}
         items.append(item)
         flag = "  ?" if item["uncertain_fields"] else ""
@@ -304,13 +357,17 @@ def main():
             missing.append(prior["id"])
             continue
         prior = {k: v for k, v in prior.items() if k != "formality"}
-        prior["photo"] = to_thumb(src)
+        prior["photo"], lifted = to_thumb(src)
+        prior["cutout"] = lifted
+        lifted_count[lifted] += 1
         total_kb += len(prior["photo"]) / 1024
         items.append(prior)
         print(f"{prior['name']:<36} {prior['category']:<10} warmth {prior['warmth']} "
               f"formality {prior.get('formality_range')}")
 
     print(f"\n{len(items)} items, ~{total_kb/1024:.1f} MB of thumbnails", file=sys.stderr)
+    print(f"backgrounds lifted by Vision: {lifted_count[True]}  ·  "
+          f"left for the app to try: {lifted_count[False]}", file=sys.stderr)
     if missing:
         print(f"couldn't find source photos for: {', '.join(missing)}", file=sys.stderr)
 

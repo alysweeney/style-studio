@@ -4,7 +4,7 @@
 
 import * as cloud from './cloud.js';
 import { buildOutfits, readForecast, seasonOf, recentlyWorn, biggestGap, wearable, explain } from './outfits.js';
-import { removeBackground, describeColour } from './cutout.js';
+import { removeBackground, describeColour, alreadyCutOut } from './cutout.js';
 import {
   CATEGORY, COLOR_FAMILY, VALUE, SATURATION, TEXTURE, PATTERN, SILHOUETTE,
   SEASONS, FORMALITY, FIT, COMFORT, SLOTS,
@@ -204,7 +204,7 @@ function flatlay(pieces) {
       .filter((p) => p.photo)
       .map((p) => el('img', {
         src: p.photo, alt: p.name, loading: 'lazy',
-        class: `lay-${p.category}${p.cutout ? ' cut' : ''}`,
+        class: `lay-${p.category}${p.cutout ? ' cut' : ''}${p.rotate ? ' rot' + p.rotate : ''}`,
       })));
 }
 
@@ -343,7 +343,8 @@ function renderCloset() {
     const unrated = item.fits_now == null || !item.comfort;
     const cls = ['tile', unrated ? 'needs' : '', item.fits_now === false ? 'packed' : ''].filter(Boolean).join(' ');
     return el('button', { class: cls, onclick: () => editItem(item) },
-      item.photo ? el('img', { src: item.photo, alt: item.name, loading: 'lazy' }) : null,
+      item.photo ? el('img', { src: item.photo, alt: item.name, loading: 'lazy',
+        class: item.rotate ? 'rot' + item.rotate : '' }) : null,
       el('figcaption', {},
         el('span', { class: 'nm' }, item.name),
         el('span', { class: 'st' },
@@ -410,9 +411,14 @@ async function processImage(src, max = 420) {
   let colour = { value: 'mid', saturation: 'muted', color_family: 'neutral' };
   try {
     const pixels = ctx.getImageData(0, 0, c.width, c.height);
-    cut = removeBackground(pixels);
-    if (cut.ok) ctx.putImageData(pixels, 0, 0);
-    else draw();
+    // Already lifted — by tools/liftsubject, or by iOS subject lift before it
+    // was shared in. Leave it alone; a flood fill over an alpha channel finds
+    // no backdrop and eats the garment.
+    cut = alreadyCutOut(pixels)
+      ? { ok: true, reason: '' }
+      : removeBackground(pixels);
+    if (cut.ok && cut.reason !== '') ctx.putImageData(pixels, 0, 0);
+    else if (!cut.ok) draw();
     colour = describeColour(cut.ok ? pixels : ctx.getImageData(0, 0, c.width, c.height));
   } catch {
     draw();
@@ -530,7 +536,7 @@ function renderQueue() {
                       !d.comfort && 'needs comfort'].filter(Boolean);
     return el('div', { class: `qitem${open ? ' open' : ''}${problems.length ? ' needs' : ''}` },
       el('button', { class: 'qhead', onclick: () => { state.expanded = open ? null : i; renderQueue(); } },
-        el('img', { src: d.photo, alt: '' }),
+        el('img', { src: d.photo, alt: '', class: d.rotate ? 'rot' + d.rotate : '' }),
         el('span', { class: 'qmeta' },
           el('span', { class: 'nm' }, d.name || 'Untitled'),
           el('span', { class: 'st' },
@@ -571,8 +577,12 @@ function renderQueue() {
           el('div', { class: 'seg-ctl' }, COMFORT.map((c) =>
             el('span', { role: 'radio', tabindex: 0, class: d.comfort === c.v ? 'on' : '',
               onclick: () => { d.comfort = c.v; d.touched = true; renderQueue(); } }, c.name)))),
-        el('button', { onclick: () => { state.queue.splice(i, 1); state.expanded = null; renderQueue(); } },
-          'Remove'),
+        el('div', { class: 'row' },
+          el('button', { onclick: () => {
+            d.rotate = ((d.rotate || 0) + 90) % 360; d.touched = true; renderQueue();
+          } }, `Rotate ${d.rotate || 0}°`),
+          el('button', { onclick: () => { state.queue.splice(i, 1); state.expanded = null; renderQueue(); } },
+            'Remove')),
       ) : null);
   }));
 
@@ -630,12 +640,15 @@ function importSeed(file) {
       // each tile is true rather than assumed.
       let lifted = 0;
       for (const [i, it] of items.entries()) {
-        note.textContent = `Lifting backgrounds… ${i + 1} of ${items.length}`;
+        note.textContent = `Importing… ${i + 1} of ${items.length}`;
         const [lo, hi] = it.formality_range || [2, 3];
         const { fits_now, comfort, photo, ...rest } = it;
-        let processed = { photo, cutout: false, cutoutReason: 'unreadable' };
+        let processed = { photo, cutout: !!it.cutout, cutoutReason: '' };
         try {
-          if (photo) processed = await processImage(photo);
+          // Seeds built by scripts/seed.py are already lifted by Vision and
+          // already WebP — re-encoding them through a canvas would be slower
+          // and strictly worse. Only unprocessed photos go through the fill.
+          if (photo && !it.cutout) processed = await processImage(photo);
         } catch { /* keep the original photo */ }
         if (processed.cutout) lifted++;
         enqueue({
