@@ -139,8 +139,10 @@ export function removeBackground(img, { tolerance = 40, feather = true, spread =
   // That shows up as the survivors being split across many islands rather than
   // one. A garment with an enclosed backdrop-coloured hole (a ring, a neckline)
   // still forms a single island, so this doesn't punish it.
-  if (keptBefore > 0 && bestSize / keptBefore < 0.6) {
-    return { ok: false, reason: 'too-similar', removed: 0, bg: bg.rgb };
+  const islandRatio = keptBefore > 0 ? bestSize / keptBefore : 0;
+  if (keptBefore > 0 && islandRatio < 0.6) {
+    return { ok: false, reason: 'too-similar', removed: 0, bg: bg.rgb,
+             islands: nComp, islandRatio };
   }
 
   let removed = 0;
@@ -153,11 +155,16 @@ export function removeBackground(img, { tolerance = 40, feather = true, spread =
   // the background gets alpha in proportion to how unlike the backdrop it is.
   if (feather) {
     const wide = tolerance * 2;
+    // `kept` must mean "survived BOTH the flood and the island filter". Testing
+    // the flood marker alone let this pass hand partial alpha back to pixels the
+    // island filter had already deleted — stray bedsheet wrinkles reappearing as
+    // ghost outlines around the garment.
+    const kept = (q) => !out[q] && label[q] === best;
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
         const p = y * width + x;
-        if (out[p]) continue;
-        const touches = out[p - 1] || out[p + 1] || out[p - width] || out[p + width];
+        if (!kept(p)) continue;
+        const touches = !kept(p - 1) || !kept(p + 1) || !kept(p - width) || !kept(p + width);
         if (!touches) continue;
         const d = Math.max(
           Math.abs(data[p * 4] - ref[0]),
@@ -177,7 +184,7 @@ export function removeBackground(img, { tolerance = 40, feather = true, spread =
   if (share < 0.04) return { ok: false, reason: 'nothing-to-remove', removed: share, bg: bg.rgb };
   if (share > 0.92) return { ok: false, reason: 'ate-the-garment', removed: share, bg: bg.rgb };
 
-  return { ok: true, removed: share, bg: bg.rgb };
+  return { ok: true, removed: share, bg: bg.rgb, islands: nComp, islandRatio };
 }
 
 // ---------------------------------------------------------------- colour
