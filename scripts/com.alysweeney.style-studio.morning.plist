@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Runs the morning job at 06:40 daily.
+
+  NOT installed automatically. Per the repo convention, anything that writes
+  somewhere consequential earns an unattended slot only after a few reviewed
+  dry runs. When you're happy with what it's been printing:
+
+      cp scripts/com.alysweeney.style-studio.morning.plist ~/Library/LaunchAgents/
+      launchctl load ~/Library/LaunchAgents/com.alysweeney.style-studio.morning.plist
+
+  To stop it:
+      launchctl unload ~/Library/LaunchAgents/com.alysweeney.style-studio.morning.plist
+
+  RunAtLoad is deliberately false — loading it shouldn't fire a run and quietly
+  overwrite today's outfits. Logs land in /tmp so a failed run leaves evidence
+  rather than vanishing.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.alysweeney.style-studio.morning</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/alysweeney/style-studio/scripts/morning.py</string>
+    <string>--apply</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/alysweeney/style-studio</string>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>6</integer>
+    <key>Minute</key><integer>40</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/style-studio-morning.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/style-studio-morning.log</string>
+</dict>
+</plist>

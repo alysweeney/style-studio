@@ -64,12 +64,15 @@ def wearable(item, season, formality, recent_ids):
     """The deterministic filter. Everything here has a right answer."""
     if item.get("condition") == "retire":
         return False
-    # Per CHECKS.md: never surface something that doesn't fit or isn't comfortable.
-    if item.get("fit_status") == "poor" or item.get("comfort") == 1:
+    # Doesn't fit her body right now. Reversible, and never a quality judgment.
+    if item.get("fits_now") is False:
         return False
-    # Not yet reviewed by a human — don't guess.
-    if item.get("fit_status") is None:
+    # Not yet rated by a human — don't guess on her behalf.
+    if item.get("fits_now") is None or not item.get("comfort"):
         return False
+    # NOTE: low comfort is deliberately NOT filtered here — one uncomfortable
+    # piece in an otherwise comfortable outfit is fine. Kept in step with
+    # outfits.js, which enforces the all-low-comfort rule at outfit level.
     if season not in item.get("seasons", []):
         return False
     # Formality is a range, not a point. A plain white tee genuinely works at

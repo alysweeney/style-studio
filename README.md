@@ -122,6 +122,51 @@ echo 'ANTHROPIC_API_KEY=sk-ant-...' > ~/.config/personal-automation/anthropic.en
 The key lives outside this repo on purpose — repo convention, and doubly so now the
 repo is public.
 
+## The morning job
+
+Composes the day's outfits on the Mac and leaves them in Firestore for the phone
+to read. The phone handles weather and the rules on its own; what it can't do is
+call Claude, because an Anthropic key is a bearer credential and would be
+readable by anyone who viewed source.
+
+```sh
+python3 scripts/morning.py                 # dry run — prints, writes nothing
+python3 scripts/morning.py --apply         # writes users/{uid}/outfits/{today}
+python3 scripts/morning.py --formality 4   # dressing up
+```
+
+Credentials go in `~/.config/personal-automation/style-studio.env`:
+
+```
+STYLE_STUDIO_EMAIL=you@example.com
+STYLE_STUDIO_PASSWORD=...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+`chmod 600` it. That's the same email and password you sign into the app with —
+**not** a service account. A service account would be a second credential to
+rotate and would bypass the security rules entirely, so a bug in a script could
+write anywhere in the database. Signing in as yourself means every read and write
+here obeys exactly the rules above, scoped to your own uid.
+
+It refuses to write if Claude references an item id you don't own — an invented
+garment is a bug, not a suggestion.
+
+### Scheduling it
+
+`scripts/com.alysweeney.style-studio.morning.plist` runs it at 06:40 daily. It is
+**not installed** — repo convention is that anything writing somewhere
+consequential earns an unattended slot only after a few reviewed dry runs.
+
+```sh
+cp scripts/com.alysweeney.style-studio.morning.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.alysweeney.style-studio.morning.plist
+```
+
+If the Mac is asleep at 06:40, launchd runs the job when it next wakes. The app
+degrades gracefully either way: with nothing waiting, it falls back to the local
+rules engine and shows outfits without the reasoning.
+
 ## Tests
 
 ```sh
