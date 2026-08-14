@@ -137,6 +137,11 @@ class Client:
             if not token:
                 return out
 
+    def doc(self, path):
+        """One document at users/{uid}/{path}, or None if it isn't there."""
+        got = self._get(f"users/{self.uid}/{path}")
+        return from_doc(got) if got.get("fields") else None
+
     def put(self, path, obj):
         """Create or overwrite users/{uid}/{path}."""
         url = f"{self.base}/users/{self.uid}/{path}"

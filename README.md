@@ -92,6 +92,9 @@ service cloud.firestore {
     match /users/{userId}/outfits/{date} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+    match /users/{userId}/style/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
   }
 }
 ```
@@ -110,7 +113,8 @@ per-document cap — a hundred-item closet is roughly 2 MB in total.
 |---|---|---|
 | `users/{uid}/closet/{itemId}` | the app | every garment, its tags, its thumbnail |
 | `users/{uid}/wearLog/{date}` | the app | what was actually worn |
-| `users/{uid}/outfits/{date}` | `scripts/outfit.py` on the Mac | the day's composed outfits and reasoning |
+| `users/{uid}/outfits/{date}` | the scheduled job | the day's composed outfits and reasoning |
+| `users/{uid}/style/dna` | `scripts/push_dna.py` | the Pinterest analysis — kept out of the public repo |
 
 ## Setup (the Python side)
 
@@ -155,20 +159,54 @@ here obeys exactly the rules above, scoped to your own uid.
 It refuses to write if Claude references an item id you don't own — an invented
 garment is a bug, not a suggestion.
 
-### Scheduling it
+### Running it without a laptop
 
-`scripts/com.alysweeney.style-studio.morning.plist` runs it at 06:40 daily. It is
-**not installed** — repo convention is that anything writing somewhere
-consequential earns an unattended slot only after a few reviewed dry runs.
+A GitHub Actions workflow (`.github/workflows/morning.yml`) runs it at 10:00 UTC
+daily — roughly 6am Eastern — so the outfits are already waiting whenever the app
+is opened. Scheduled workflows on public repositories are free and don't consume
+Actions minutes.
+
+Two things have to be in Firestore first, because a CI runner has neither your
+laptop's files nor its keychain:
 
 ```sh
-cp scripts/com.alysweeney.style-studio.morning.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.alysweeney.style-studio.morning.plist
+python3 scripts/push_dna.py --apply    # style DNA -> users/{uid}/style/dna
 ```
 
-If the Mac is asleep at 06:40, launchd runs the job when it next wakes. The app
-degrades gracefully either way: with nothing waiting, it falls back to the local
-rules engine and shows outfits without the reasoning.
+and your closet, which the app's **Closet → Import** does.
+
+Then add five repository secrets. Run these yourself so the values never pass
+through a chat transcript — prefix each with `!` in Claude Code, or paste into a
+terminal:
+
+```sh
+gh secret set STYLE_STUDIO_EMAIL    --repo alysweeney/style-studio
+gh secret set STYLE_STUDIO_PASSWORD --repo alysweeney/style-studio
+gh secret set ANTHROPIC_API_KEY     --repo alysweeney/style-studio
+gh secret set STYLE_STUDIO_LAT      --repo alysweeney/style-studio
+gh secret set STYLE_STUDIO_LON      --repo alysweeney/style-studio
+```
+
+Each prompts for the value and reads it from stdin. Latitude and longitude are
+required rather than defaulted: a runner has no geolocation, and an outfit
+composed for the wrong city is worse than no outfit at all.
+
+Test it immediately from **Actions → Morning outfits → Run workflow** instead of
+waiting a day.
+
+Two caveats worth knowing:
+
+- **GitHub disables scheduled workflows after 60 days without repository
+  activity.** It emails first. Any commit re-enables it.
+- **The schedule drifts an hour across daylight saving**, because cron is
+  UTC-only. Harmless here — it only has to finish before you look at your phone.
+
+### Or on your Mac
+
+`scripts/com.alysweeney.style-studio.morning.plist` does the same thing via
+launchd at 06:40, if you'd rather it stayed local. Not installed by default;
+instructions are in the file. The Actions route is better precisely because it
+doesn't care whether the laptop is open.
 
 ## Tests
 

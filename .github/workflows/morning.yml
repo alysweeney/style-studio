@@ -1,0 +1,61 @@
+# Composes the day's outfits and leaves them in Firestore, so the phone has
+# something waiting without a laptop ever being opened.
+#
+# Free: scheduled workflows on public repositories don't consume Actions minutes.
+# Secrets are encrypted, are not exposed to forks, and are masked in logs.
+name: Morning outfits
+
+on:
+  schedule:
+    # 10:00 UTC — about 6am Eastern in summer, 5am in winter. GitHub only
+    # accepts UTC, so the local time drifts by an hour across DST. That's fine
+    # here: the job only has to finish before she looks at her phone.
+    - cron: '0 10 * * *'
+  # So you can trigger it by hand from the Actions tab without waiting a day.
+  workflow_dispatch:
+
+# A slow run shouldn't overlap the next day's.
+concurrency:
+  group: morning-outfits
+  cancel-in-progress: false
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the Anthropic SDK
+        run: pip install --quiet anthropic
+
+      - name: Compose today's outfits
+        env:
+          STYLE_STUDIO_EMAIL: ${{ secrets.STYLE_STUDIO_EMAIL }}
+          STYLE_STUDIO_PASSWORD: ${{ secrets.STYLE_STUDIO_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          STYLE_STUDIO_LAT: ${{ secrets.STYLE_STUDIO_LAT }}
+          STYLE_STUDIO_LON: ${{ secrets.STYLE_STUDIO_LON }}
+        run: python3 scripts/morning.py --apply
+
+      # The job is silent when it works. If it fails, say so loudly in the run
+      # summary rather than leaving a red dot nobody looks at — per the repo's
+      # "tripwires, not status reports" rule.
+      - name: Explain a failure
+        if: failure()
+        run: |
+          {
+            echo "### Morning outfits did not run"
+            echo ""
+            echo "The app falls back to its own rules engine, so it still shows"
+            echo "weather-appropriate outfits today — just without the reasoning."
+            echo ""
+            echo "Most likely causes, in order:"
+            echo "- a missing or wrong repository secret"
+            echo "- the closet is empty in Firestore (import the seed from the app)"
+            echo "- fewer than three items have a fit and comfort rating"
+          } >> "$GITHUB_STEP_SUMMARY"

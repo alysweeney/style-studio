@@ -114,11 +114,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="write to Firestore")
     ap.add_argument("--formality", type=int, default=2, help="1 lounge … 5 formal")
-    ap.add_argument("--lat", type=float, default=weather.DEFAULT_LAT)
-    ap.add_argument("--lon", type=float, default=weather.DEFAULT_LON)
+    ap.add_argument("--lat", type=float, default=None)
+    ap.add_argument("--lon", type=float, default=None)
     args = ap.parse_args()
 
     email, password = credentials()
+
+    # A CI runner has no geolocation, and silently defaulting to somewhere else
+    # would produce confidently wrong outfits — the one failure mode that makes
+    # the whole thing untrustworthy. Demand the coordinates instead.
+    lat = args.lat if args.lat is not None else os.environ.get("STYLE_STUDIO_LAT")
+    lon = args.lon if args.lon is not None else os.environ.get("STYLE_STUDIO_LON")
+    if lat is None or lon is None:
+        raise SystemExit(
+            "No location. Set STYLE_STUDIO_LAT and STYLE_STUDIO_LON (or pass "
+            "--lat/--lon).\nGuessing a location means guessing the weather, and "
+            "an outfit for the wrong city is worse than no outfit."
+        )
+    lat, lon = float(lat), float(lon)
     db = firestore.Client(email, password)
     print(f"signed in as {email}", file=sys.stderr)
 
@@ -127,7 +140,7 @@ def main():
         raise SystemExit("Closet is empty in Firestore. Import the seed from the app first.")
 
     log = db.collection("wearLog")
-    forecast = weather.describe(weather.fetch(args.lat, args.lon))
+    forecast = weather.describe(weather.fetch(lat, lon))
     season = outfit.season_now()
     recent = outfit.recently_worn({"entries": log})
 
@@ -149,11 +162,22 @@ def main():
             + (f" — {unrated} still have no fit/comfort rating." if unrated else ".")
         )
 
-    if not lib.STYLE_DNA.exists():
-        raise SystemExit(f"No style DNA at {lib.STYLE_DNA}.")
+    # The style DNA is an analysis of Aly specifically, so it lives in Firestore
+    # rather than the public repo — which also means a CI runner can reach it
+    # without the repo carrying anything personal.
+    stored = db.doc("style/dna")
+    if stored and stored.get("text"):
+        dna = stored["text"]
+    elif lib.STYLE_DNA.exists():
+        dna = lib.STYLE_DNA.read_text()
+        print("using the local style DNA — run scripts/push_dna.py --apply so "
+              "the scheduled job can see it too", file=sys.stderr)
+    else:
+        raise SystemExit(
+            "No style DNA in Firestore or on disk. Run scripts/push_dna.py --apply."
+        )
 
-    result = compose(lib.client(), candidates, forecast, season,
-                     args.formality, lib.STYLE_DNA.read_text())
+    result = compose(lib.client(), candidates, forecast, season, args.formality, dna)
 
     by_id = {i["id"]: i for i in closet}
     for o in result["outfits"]:
@@ -175,7 +199,11 @@ def main():
         print("\nDry run — nothing written. Re-run with --apply.", file=sys.stderr)
         return
 
-    today = dt.date.today().isoformat()
+    # Open-Meteo is queried with timezone=auto, so the forecast's own date is
+    # already Aly's local date. Using dt.date.today() would use the runner's
+    # clock — UTC — and after 8pm Eastern that files the outfits under tomorrow,
+    # where the phone never looks.
+    today = forecast["date"]
     db.put(f"outfits/{today}", {
         **result,
         "date": today,
