@@ -104,19 +104,19 @@ CATALOG = {
                   warmth=1, formality_range=[2, 3], seasons=WARM,
                   notes="Olive is one of her recurring accents, and the open knit is a "
                         "texture she has almost nothing else of."),
-    "IMG_6046": T(id="tee-teal-relaxed", name="teal short sleeve tee",
+    "IMG_6046": T(rotate=270, id="tee-teal-relaxed", name="teal short sleeve tee",
                   subcategory="tee", color_primary="teal", color_family="cool",
                   value="mid", silhouette="relaxed", warmth=1,
                   formality_range=[2, 2], seasons=ALL_SEASONS,
                   notes="Teal sits outside the board palette — expect it to score lower "
                         "than the neutrals, which is honest rather than a bug."),
-    "IMG_6047": T(id="top-cami-ivory-lace", name="ivory lace-trim camisole",
+    "IMG_6047": T(rotate=180, id="top-cami-ivory-lace", name="ivory lace-trim camisole",
                   subcategory="cami", color_primary="ivory", value="light",
                   fabric="satin and lace", texture="slick", silhouette="straight",
                   warmth=1, formality_range=[1, 3], seasons=WARM,
                   notes="Reads as lingerie flat, but under the leather jacket or a cardigan "
                         "it's the layering piece her boards use constantly."),
-    "IMG_6049": T(id="sweat-black-crew", name="black crewneck sweatshirt",
+    "IMG_6049": T(rotate=270, id="sweat-black-crew", name="black crewneck sweatshirt",
                   subcategory="sweatshirt", color_primary="black", value="dark",
                   fabric="fleece-back cotton", texture="smooth", structure=1,
                   silhouette="oversized", warmth=3, formality_range=[1, 2],
@@ -147,20 +147,21 @@ CATALOG = {
                         "photo is upside down — hence rotate=180. Possibly the same "
                         "garment as IMG_6045 from another angle; check before both end "
                         "up in the closet as separates."),
-    "IMG_6045": T(id="skirt-denim-utility", name="denim utility skirt",
-                  category="bottom", subcategory="skirt", color_primary="mid blue",
+    "IMG_6045": T(rotate=270, id="skirt-denim-utility", name="denim utility top",
+                  category="top", subcategory="denim top", color_primary="mid blue",
                   color_family="cool", fabric="denim", texture="crisp", structure=3,
-                  silhouette="straight", length="knee", rise="high", leg="n/a",
+                  silhouette="relaxed", length="hip", rise="n/a", leg="n/a",
                   formality_range=[2, 3], seasons=WARM,
-                  uncertain_fields=["subcategory"],
-                  notes="Patch pockets and a button placket. See the note on IMG_6044 — "
-                        "these two may be one skirt."),
-    "IMG_6048": T(id="sweats-gyoza-white", name="gyoza print sweatpants",
-                  category="bottom", subcategory="joggers", color_primary="white",
+                  notes="Corrected by Aly 2026-08-14: a denim TOP, not a skirt. The id "
+                        "keeps its old name so the Firestore document isn't orphaned."),
+    "IMG_6048": T(rotate=180, id="sweats-gyoza-white", name="gyoza print sweatshirt",
+                  category="top", subcategory="sweatshirt", color_primary="white",
                   value="light", fabric="fleece-back cotton", texture="smooth",
-                  pattern="print", structure=1, silhouette="relaxed", length="full",
-                  rise="mid", leg="straight", warmth=3, formality_range=[1, 1],
-                  notes="Lounge only, and delightfully so."),
+                  pattern="print", structure=1, silhouette="relaxed", length="hip",
+                  rise="n/a", leg="n/a", warmth=3, formality_range=[1, 2],
+                  notes="Corrected by Aly 2026-08-14: a sweatshirt, not sweatpants — the "
+                        "GYOZA print reads upside down in the raw photo. Id kept so the "
+                        "Firestore document isn't orphaned."),
     "10.58.02": T(id="jeans-wide-tie-mid", name="mid-wash tie-waist wide jeans",
                 category="bottom", subcategory="jeans", color_primary="mid blue",
                 color_family="cool", fabric="denim", texture="crisp", structure=3,
@@ -176,7 +177,7 @@ CATALOG = {
                 notes="Pairs with the eyelet tank as a set. Listing shot on a model."),
 
     # ---- outerwear
-    "IMG_6038": T(id="cardigan-grey-mohair", name="grey mohair cardigan",
+    "IMG_6038": T(rotate=270, id="cardigan-grey-mohair", name="grey mohair cardigan",
                   category="outerwear", subcategory="cardigan", color_primary="grey",
                   value="light", fabric="mohair blend", texture="fuzzy", structure=1,
                   silhouette="oversized", warmth=3, formality_range=[2, 3],
@@ -231,7 +232,7 @@ CATALOG = {
                   silhouette="fitted", length=None, warmth=3, formality_range=[2, 4],
                   seasons=["fall", "winter"],
                   notes="Suede, so the rain rule will correctly keep these in on wet days."),
-    "IMG_6037": T(id="heels-slingback-black", name="black patent slingbacks",
+    "IMG_6037": T(rotate=180, id="heels-slingback-black", name="black patent slingbacks",
                   category="shoes", subcategory="heels", color_primary="black",
                   value="dark", fabric="patent leather", texture="slick", structure=3,
                   silhouette="fitted", length=None, warmth=1, formality_range=[3, 5],
