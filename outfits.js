@@ -181,3 +181,89 @@ export function biggestGap(items, ctx) {
   const blocked = SLOTS.filter((s) => counts[s] > 0).reduce((a, s) => a * counts[s], 1);
   return { slot: missing[0], alsoMissing: missing.slice(1), unlocks: blocked };
 }
+
+// ---------------------------------------------------------------- reasoning
+
+// Why an outfit works, written from the same signals that made it score well.
+//
+// This exists so the reasoning is free. The scorer already knows the outfit
+// was picked for slim-against-wide, or for light-over-dark, or for carrying
+// three textures — and those aren't generic styling platitudes, they're the
+// specific rules distilled from Aly's own boards (see data/style-dna.md). An
+// LLM was being handed the same findings and asked to phrase them; this skips
+// the round trip, the API key and the bill.
+//
+// It is less fluent and less surprising than a model. It is not less true.
+
+const NAMES = {
+  slimWide: 'Slim top over a wide bottom',
+  contrast: 'Light over dark',
+  texture: 'Texture against texture',
+  layered: 'Long line over a straight column',
+  plain: 'Quiet and neutral',
+};
+
+export function explain(pieces, forecast) {
+  const values = new Set(pieces.map((p) => p.value));
+  const textures = new Set(pieces.map((p) => p.texture).filter(Boolean));
+  const sil = pieces.map((p) => p.silhouette);
+  const slimWide = sil.includes('fitted') && (sil.includes('relaxed') || sil.includes('oversized'));
+  const layer = pieces.find((p) => p.category === 'outerwear');
+  const top = pieces.find((p) => p.category === 'top');
+  const bottom = pieces.find((p) => p.category === 'bottom');
+  const warmth = pieces.reduce((a, p) => a + (p.warmth || 0), 0);
+
+  // Lead with whichever rule this outfit leans on hardest.
+  const reasons = [];
+  if (slimWide) {
+    reasons.push('this is the **slim top over a wide bottom** shape that runs through more ' +
+                 'of your saved outfits than any other');
+  }
+  if (values.size > 1 && values.has('light') && values.has('dark')) {
+    reasons.push('light over dark — the single most repeated colour relationship in your pins');
+  } else if (values.size > 1) {
+    reasons.push('enough contrast between the pieces to avoid the flat, all-one-tone look');
+  }
+  if (textures.size >= 3) {
+    reasons.push(`three textures at once (${[...textures].join(', ')}), which is what stops an ` +
+                 'outfit reading cheap even when the colours are right');
+  } else if (textures.size === 2) {
+    reasons.push(`${[...textures].join(' against ')} — two textures, the norm across your boards`);
+  }
+  if (layer && layer.structure >= 3) {
+    reasons.push('a structured layer over softer pieces, which is the mix your boards use and ' +
+                 'your closet mostly does not');
+  }
+
+  const title = slimWide ? NAMES.slimWide
+    : values.size > 1 ? NAMES.contrast
+    : textures.size >= 2 ? NAMES.texture
+    : layer ? NAMES.layered
+    : NAMES.plain;
+
+  let why = reasons.length
+    ? reasons[0][0].toUpperCase() + reasons[0].slice(1) + (reasons[1] ? `, and ${reasons[1]}` : '') + '.'
+    : 'Nothing clever — it fits the weather and the pieces do not fight each other.';
+
+  const [lo, hi] = forecast.target;
+  if (warmth < lo) why += ` Warmth ${warmth} is under today's ${lo}–${hi}, so expect to feel it.`;
+  if (forecast.needsRain && !pieces.some((p) => p.water_ok)) {
+    why += ' Nothing here copes with rain, so take something that does.';
+  }
+
+  // Styling moves, derived rather than invented. Her boards tuck almost
+  // universally and wear outer layers open, so the rules are worth stating.
+  const how = [];
+  if (top && bottom) {
+    const rise = bottom.rise;
+    if (top.length === 'cropped') how.push('no tuck needed — the hem already sits at the waistband');
+    else if (rise === 'high') how.push('front tuck only, so the high waist still reads');
+    else if (rise === 'mid') how.push('half tuck at the front, leave the back out');
+  }
+  if (layer) how.push(`${layer.name} worn open, sleeves pushed to the forearm`);
+  if (pieces.some((p) => p.category === 'shoes' && p.subcategory === 'sneakers')) {
+    how.push('sneakers keep it casual — swap for flats to lift the whole thing');
+  }
+
+  return { title, why, how: how.length ? how.join('. ') + '.' : '' };
+}

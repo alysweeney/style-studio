@@ -3,7 +3,7 @@
 // screen and takes input back.
 
 import * as cloud from './cloud.js';
-import { buildOutfits, readForecast, seasonOf, recentlyWorn, biggestGap, wearable } from './outfits.js';
+import { buildOutfits, readForecast, seasonOf, recentlyWorn, biggestGap, wearable, explain } from './outfits.js';
 import { removeBackground, describeColour } from './cutout.js';
 import {
   CATEGORY, COLOR_FAMILY, VALUE, SATURATION, TEXTURE, PATTERN, SILHOUETTE,
@@ -208,6 +208,18 @@ function flatlay(pieces) {
       })));
 }
 
+// explain() marks the load-bearing phrase with **stars**; render that as bold
+// rather than leaking punctuation onto the screen.
+function emphasise(text) {
+  const p = el('p', {});
+  text.split(/(\*\*[^*]+\*\*)/).forEach((chunk) => {
+    if (chunk.startsWith('**') && chunk.endsWith('**')) {
+      p.append(el('b', {}, chunk.slice(2, -2)));
+    } else if (chunk) p.append(chunk);
+  });
+  return p;
+}
+
 function outfitCard(outfit, note) {
   const { pieces, warmth } = outfit;
   return el('article', { class: 'card' },
@@ -222,7 +234,7 @@ function outfitCard(outfit, note) {
       el('span', { class: 'num' }, warmth)),
     note ? el('div', { class: 'rationale' },
       note.why ? el('div', { class: 'rationale-block' },
-        el('span', { class: 'label' }, 'Why it works'), el('p', {}, note.why)) : null,
+        el('span', { class: 'label' }, 'Why it works'), emphasise(note.why)) : null,
       note.how ? el('div', { class: 'rationale-block' },
         el('span', { class: 'label' }, 'How to wear it'), el('p', {}, note.how)) : null,
     ) : null,
@@ -282,7 +294,10 @@ function renderToday(reshuffle = false) {
   if (!cards.length) {
     const built = buildOutfits(state.closet, ctx, reshuffle ? 6 : 3);
     const picked = reshuffle ? built.slice(3) : built;
-    cards = (picked.length ? picked : built).map((o) => outfitCard(o, null));
+    cards = (picked.length ? picked : built).map((o) => {
+      const said = explain(o.pieces, state.forecast);
+      return outfitCard({ ...o, name: said.title }, { why: said.why, how: said.how });
+    });
   }
 
   if (!cards.length) {
@@ -296,9 +311,18 @@ function renderToday(reshuffle = false) {
 
   const gap = biggestGap(state.closet, ctx);
   if (gap) {
+    const owned = state.closet.filter((i) => i.category === gap.slot).length;
+    const level = (FORMALITY.find((f) => f.v === state.formality) || {}).name || '';
     gapBox.replaceChildren(el('div', { class: 'gap' },
       el('span', { class: 'label' }, 'The one gap worth closing'),
-      el('p', {}, `You have no ${gap.slot}. Adding one would unlock `,
+      el('p', {},
+        owned
+          // She owns some; they just don't reach this season or dress level.
+          // Saying "you have no bottoms" to someone with eight is how an app
+          // stops being believed.
+          ? `None of your ${owned} ${gap.slot} work for ${ctx.season} at ${level.toLowerCase()}. `
+          : `You have no ${gap.slot}. `,
+        'One that did would unlock ',
         el('span', { class: 'count' }, gap.unlocks),
         ` combination${gap.unlocks > 1 ? 's' : ''} you already own the rest of.`)));
   }

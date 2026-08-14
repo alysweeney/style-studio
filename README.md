@@ -47,11 +47,16 @@ closet photos ──(vision + human review)──> data/closet.json          │
 ```
 
 **Why the work is split that way.** The rules handle everything with a right answer:
-layer arithmetic, what she wore yesterday, what doesn't fit. Claude handles the part
-with no right answer: which combination reads like her boards, and why. Handing the
-arithmetic to a model is how you get an outfit that's wrong about the weather; handing
-the taste to a rules engine is how you get outfits that are technically correct and
-look like nothing.
+layer arithmetic, what she wore yesterday, what doesn't fit. Handing arithmetic to a
+model is how you get an outfit that's confidently wrong about the weather.
+
+**The reasoning is free, and Claude is optional.** The scorer already knows *why* an
+outfit won — slim against wide, light over dark, three textures — and those are the
+specific rules distilled from her boards, not generic styling advice. `explain()` in
+`outfits.js` turns those signals into sentences, client-side, offline, at no cost.
+`scripts/morning.py` layers an LLM on top for phrasing that's more fluent and
+occasionally more surprising, but **nothing depends on it**: with no API key, no
+billing and no scheduled job, the app still shows outfits with real reasoning.
 
 ## Firebase setup
 

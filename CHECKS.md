@@ -61,6 +61,16 @@ described in the brief and from conventions inherited from `finance-tracker`.
   lost a good cut-out. Any future change here gets measured against the real seed
   before it gets believed.
 
+- **The app must work with no API key.** Aly asked whether this could be free, on
+  2026-08-14, and the honest answer was yes: the scorer already knows which rule each
+  outfit leans on, so `explain()` writes the reasoning from those signals for nothing.
+  Claude is a phrasing upgrade, never a dependency. Any future feature that only works
+  with a key needs a free path alongside it.
+
+- **Never report a gap without its context.** "You have no bottoms" to someone who owns
+  eight reads as broken. The gap is always relative to the season and dress level being
+  asked for, so the sentence has to name both.
+
 - **One purchase suggestion at a time, or none.** The gap list ranks by outfits
   unlocked and shows only the top entry. A list of five things to buy is the exact
   behavior this project exists to prevent.

@@ -115,5 +115,24 @@ ok('stays silent when nothing is missing', biggestGap(
   [...ALL, { id: 'sh', category: 'shoes', warmth: 1, seasons: ['fall'],
              formality_range: [2, 4], ...rated }], ctx) === null);
 
+
+print('\nFree reasoning');
+const wide = { ...mild, target: [5, 8] };
+const ex1 = explain([ALL[0], ALL[2]], wide);       // fitted white top + relaxed jeans
+ok('names the slim-over-wide formula', /slim top over a wide bottom/i.test(ex1.why), ex1.why);
+ok('gives it a title', !!ex1.title);
+ok('spots light-over-dark', /light over dark/i.test(ex1.why), ex1.why);
+const ex2 = explain([ALL[1], ALL[3], ALL[4]], wide);
+ok('always says something', ex2.why.length > 20, ex2.why);
+ok('mentions the open layer', /worn open/i.test(ex2.how), ex2.how);
+const cold = explain([ALL[0], ALL[2]], { ...mild, target: [14, 18], needsRain: false });
+ok('admits when the outfit is too cold', /under today/i.test(cold.why), cold.why);
+const rainy = explain([ALL[0], ALL[2]], { ...mild, target: [1, 9], needsRain: true });
+ok('warns when nothing copes with rain', /rain/i.test(rainy.why), rainy.why);
+const cropped = explain([{ ...ALL[0], length: 'cropped' }, { ...ALL[2], rise: 'high' }], wide);
+ok('skips the tuck advice for a cropped top', /no tuck needed/i.test(cropped.how), cropped.how);
+const tucked = explain([{ ...ALL[0], length: 'hip' }, { ...ALL[2], rise: 'high' }], wide);
+ok('asks for a front tuck on a high rise', /front tuck/i.test(tucked.how), tucked.how);
+
 print(failures ? `\n${failures} failure(s)\n` : '\nall engine checks passed\n');
 if (failures) throw new Error(`${failures} engine check(s) failed`);
