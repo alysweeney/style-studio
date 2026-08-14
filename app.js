@@ -668,10 +668,17 @@ function editItem(item) {
 }
 
 function wireAdd() {
-  // NB: #drop is a <label> that wraps #add-file, so the browser already forwards
-  // the tap to the input. Calling input.click() here as well opened the picker
-  // TWICE — and the second open supersedes the first, discarding whatever was
-  // chosen. It looked exactly like "selecting photos does nothing".
+  // Exactly one path from tap to picker. This used to be a <label> wrapping the
+  // input AND an explicit click() — an input nested in its own label already
+  // double-fires in Chrome, so the picker opened twice, the second open
+  // superseded the first, and the selection vanished. It looked precisely like
+  // "choosing photos does nothing".
+  const openPicker = () => $('#add-file').click();
+  $('#drop').addEventListener('click', openPicker);
+  $('#drop').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); }
+  });
+
   $('#add-file').addEventListener('change', (ev) => {
     const files = [...(ev.target.files || [])];
     ev.target.value = '';

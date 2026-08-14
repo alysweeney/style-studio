@@ -89,15 +89,20 @@
       <h1 class="wordmark">Add an item</h1>
     </header>
 
-    <label class="drop" id="drop">
+    <!-- Deliberately a <div>, not a <label> wrapping the input. An input nested
+         inside its own label double-fires the click in Chrome, which opened the
+         file picker twice — the second open superseded the first and the chosen
+         photos were silently discarded. One explicit handler, one click. -->
+    <div class="drop" id="drop" role="button" tabindex="0"
+         aria-label="Add photos of your clothes">
       <img id="add-preview" alt="" hidden>
       <span class="drop-empty" id="drop-empty">
         <span class="drop-plus">+</span>
         <span>Add photos — pick as many as you like</span>
         <span class="drop-sub">JPEG, PNG or HEIC</span>
       </span>
-      <input type="file" id="add-file" accept="image/*,.heic,.heif" multiple hidden>
-    </label>
+    </div>
+    <input type="file" id="add-file" accept="image/*,.heic,.heif" multiple hidden>
     <p id="add-photo-note" class="hint" hidden></p>
 
     <div class="human" id="add-bulk" hidden></div>
