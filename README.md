@@ -18,13 +18,16 @@ becomes something a computer can say out loud.
 
 | Piece | State |
 |---|---|
-| `taxonomy.md` — the shared vocabulary | drafted, **needs Aly's approval** |
-| `CHECKS.md` — pre-commitments | drafted |
-| `scripts/weather.py` — Open-Meteo + warmth model | **working, verified against live data** |
-| `scripts/catalog.py` — photo → tagged item | written, untested (needs photos) |
-| `scripts/outfit.py` — rules + Claude compose | written, untested (needs a catalog) |
-| `data/style-dna.md` — the Pinterest distillation | **not started — needs the boards** |
-| App | static mockup for approval, then a PWA |
+| `taxonomy.{md,js}` — the shared vocabulary | in use; formality is a range, not a point |
+| `outfits.js` — rules engine | working, 36 checks |
+| `cutout.js` — background removal | working, 18 checks; lifts 30 of 36 real photos |
+| `index.html` / `app.js` / `styles.css` | working — sign-in, flat-lay, bulk add |
+| `data/style-dna.md` | distilled from ~300 outfit pins |
+| Closet | 36 items tagged; `scripts/seed.py` builds the import |
+| Firebase | project `style-studio-a766a`, auth + Firestore live |
+| **Live app** | **https://alysweeney.github.io/style-studio/** |
+| `scripts/morning.py` — Claude composition | written, dry-run only; not yet scheduled |
+| Gap list | implemented; needs a few weeks of wear data to be worth trusting |
 
 ## Architecture
 
